@@ -1,10 +1,11 @@
 import argparse
 import os.path
-import traceback
+import time
 
+import numpy as np
 import torch
-from jarvis.core.atoms import Atoms, ase_to_atoms
 from ase.io import read as ase_read
+from jarvis.core.atoms import ase_to_atoms
 from jarvis.core.kpoints import Kpoints3D as Kpoints
 from tqdm import tqdm
 
@@ -23,8 +24,7 @@ if __name__ == "__main__":
     model = default_model()
     shell_dict = generate_shell_dict_upto_Z65()
 
-    n_success = 0
-    n_fail = 0
+    results = []
 
     with torch.no_grad():
         for f in tqdm(args.structures, desc="Predicting"):
@@ -34,6 +34,7 @@ if __name__ == "__main__":
             kpoints = Kpoints().kpath(atoms, line_density=20)
             klines = kpts_to_klines(kpoints.kpts, default_points=2)
 
+            t_start = time.time()
             try:
 
                 properties, success = model.compute_multi_element_properties(
@@ -45,13 +46,24 @@ if __name__ == "__main__":
                     device="cuda" if torch.cuda.is_available() else "cpu",
                 )
 
-                if not success:
-                    raise RuntimeError("Failed to compute properties")
-                n_success += 1
+                results.append({
+                    "success": success,
+                    "reason": "Prediction failed",
+                    "time": time.time() - t_start,
+                })
 
             except Exception as e:
 
-                n_fail += 1
-                print(traceback.format_exc())
+                results.append({
+                    "success": False,
+                    "reason": f"Exception: {e}",
+                    "time": time.time() - t_start,
+                })
 
+    n_success = sum(r["success"] for r in results)
+    n_fail = sum(not r["success"] for r in results)
     print(f"{n_success}/{n_success + n_fail} successful")
+    av_time = np.mean([r["time"] for r in results if r["success"]])
+    print(f"    Average successful time: {av_time}")
+    av_time = np.mean([r["time"] for r in results if not r["success"]])
+    print(f"    Average fail time: {av_time}")
