@@ -41,7 +41,6 @@ class BatchedSlakonet:
             s_feed=self.s_feed,
             nelectron=self.model._calculate_system_electrons(geometry, self.updated_skfs),
             device=device,
-            with_eigenvectors=False,
         )
 
         def tensor_to_list(t: torch.Tensor) -> list:
@@ -68,19 +67,14 @@ if __name__ == "__main__":
     parser.add_argument("structures", nargs="*")
     args = parser.parse_args()
 
-    for f in args.structures:
-        assert os.path.isfile(f)
-
     model = BatchedSlakonet()
     results = []
 
     with torch.no_grad():
         for f in tqdm(args.structures, desc="Predicting"):
-
-            atoms = ase_read(f)
             try:
                 results.append(model.predict(
-                    structure=atoms,
+                    structure=ase_read(f),
                     k_grid=(6, 6, 6),
                 ))
             except Exception as e:
